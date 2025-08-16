@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Ubicación Actual</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .location-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .location-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            border-left: 4px solid #4facfe;
+        }
+
+        .info-item i {
+            font-size: 1.5rem;
+            margin-right: 15px;
+            color: #4facfe;
+        }
+
+        .info-item .label {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+
+        .info-item .value {
+            color: #212529;
+            font-size: 1.1rem;
+        }
+
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: #4facfe;
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .accuracy-indicator {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .accuracy-high {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .accuracy-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .accuracy-low {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗺️ Mi Ubicación Actual</h1>
+            <p>Descubre tu posición exacta con precisión GPS</p>
+        </div>
+
+        <div class="content">
+            <div class="location-card">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <button class="btn" onclick="getLocation()">
+                        📍 Obtener Mi Ubicación
+                    </button>
+                    <button class="btn" onclick="watchLocation()" id="watchBtn">
+                        🔄 Seguimiento en Tiempo Real
+                    </button>
+                </div>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Obteniendo tu ubicación...</p>
+                </div>
+
+                <div class="error" id="error"></div>
+
+                <div class="location-info" id="locationInfo" style="display: none;">
+                    <div class="info-item">
+                        <span style="font-size: 1.5rem;">🌍</span>
+                        <div>
+                            <div class="label">Latitud</div>
+                            <div class="value" id="latitude">-</div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span style="font-size: 1.5rem;">📍</span>
+                        <div>
+                            <div class="label">Longitud</div>
+                            <div class="value" id="longitude">-</div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span style="font-size: 1.5rem;">🎯</span>
+                        <div>
+                            <div class="label">Precisión</div>
+                            <div class="value" id="accuracy">-</div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <span style="font-size: 1.5rem;">⏰</span>
+                        <div>
+                            <div class="label">Última Actualización</div>
+                            <div class="value" id="timestamp">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="map" style="display: none; margin-top: 20px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+        let map;
+        let marker;
+        let watchId;
+        let isWatching = false;
+
+        function showLoading() {
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('error').classList.remove('show');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.remove('show');
+        }
+
+        function showError(message) {
+            hideLoading();
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+        }
+
+        function getAccuracyClass(accuracy) {
+            if (accuracy <= 10) return 'accuracy-high';
+            if (accuracy <= 50) return 'accuracy-medium';
+            return 'accuracy-low';
+        }
+
+        function getAccuracyText(accuracy) {
+            if (accuracy <= 10) return 'Alta';
+            if (accuracy <= 50) return 'Media';
+            return 'Baja';
+        }
+
+        function displayLocation(position) {
+            hideLoading();
+            
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const accuracy = Math.round(position.coords.accuracy);
+            const timestamp = new Date(position.timestamp);
+
+            // Mostrar información
+            document.getElementById('latitude').textContent = lat.toFixed(6);
+            document.getElementById('longitude').textContent = lng.toFixed(6);
+            
+            const accuracyElement = document.getElementById('accuracy');
+            const accuracyClass = getAccuracyClass(accuracy);
+            const accuracyText = getAccuracyText(accuracy);
+            accuracyElement.innerHTML = `±${accuracy}m <span class="accuracy-indicator ${accuracyClass}">${accuracyText}</span>`;
+            
+            document.getElementById('timestamp').textContent = timestamp.toLocaleString('es-ES');
+            
+            document.getElementById('locationInfo').style.display = 'grid';
+
+            // Mostrar mapa
+            const mapDiv = document.getElementById('map');
+            mapDiv.style.display = 'block';
+
+            if (!map) {
+                // Crear mapa
+                map = L.map('map').setView([lat, lng], 16);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+
+                // Añadir marcador
+                marker = L.marker([lat, lng])
+                    .addTo(map)
+                    .bindPopup(`
+                        <b>Tu ubicación actual</b><br>
+                        Lat: ${lat.toFixed(6)}<br>
+                        Lng: ${lng.toFixed(6)}<br>
+                        Precisión: ±${accuracy}m
+                    `)
+                    .openPopup();
+
+                // Añadir círculo de precisión
+                L.circle([lat, lng], {
+                    color: '#4facfe',
+                    fillColor: '#4facfe',
+                    fillOpacity: 0.1,
+                    radius: accuracy
+                }).addTo(map);
+            } else {
+                // Actualizar mapa existente
+                map.setView([lat, lng], 16);
+                marker.setLatLng([lat, lng]);
+                marker.setPopupContent(`
+                    <b>Tu ubicación actual</b><br>
+                    Lat: ${lat.toFixed(6)}<br>
+                    Lng: ${lng.toFixed(6)}<br>
+                    Precisión: ±${accuracy}m
+                `);
+                marker.openPopup();
+            }
+        }
+
+        function getLocation() {
+            if (!navigator.geolocation) {
+                showError('La geolocalización no está soportada en este navegador.');
+                return;
+            }
+
+            showLoading();
+
+            navigator.geolocation.getCurrentPosition(
+                displayLocation,
+                function(error) {
+                    let message = 'Error desconocido al obtener la ubicación.';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            message = 'Permiso denegado. Por favor, permite el acceso a la ubicación.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            message = 'Información de ubicación no disponible.';
+                            break;
+                        case error.TIMEOUT:
+                            message = 'Tiempo de espera agotado al obtener la ubicación.';
+                            break;
+                    }
+                    showError(message);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        }
+
+        function watchLocation() {
+            const watchBtn = document.getElementById('watchBtn');
+            
+            if (!isWatching) {
+                if (!navigator.geolocation) {
+                    showError('La geolocalización no está soportada en este navegador.');
+                    return;
+                }
+
+                showLoading();
+                isWatching = true;
+                watchBtn.innerHTML = '⏹️ Detener Seguimiento';
+                watchBtn.style.background = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)';
+
+                watchId = navigator.geolocation.watchPosition(
+                    displayLocation,
+                    function(error) {
+                        let message = 'Error en el seguimiento de ubicación.';
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                message = 'Permiso denegado para el seguimiento.';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                message = 'Información de ubicación no disponible.';
+                                break;
+                            case error.TIMEOUT:
+                                message = 'Tiempo de espera agotado.';
+                                break;
+                        }
+                        showError(message);
+                        stopWatching();
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                stopWatching();
+            }
+        }
+
+        function stopWatching() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+            isWatching = false;
+            const watchBtn = document.getElementById('watchBtn');
+            watchBtn.innerHTML = '🔄 Seguimiento en Tiempo Real';
+            watchBtn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            hideLoading();
+        }
+    </script>
+</body>
+</html>
