@@ -149,8 +149,27 @@
             margin-bottom: 10px;
         }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        .custom-marker {
+            position: relative;
+        }
+
+        .custom-marker div {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(79, 172, 254, 0.7);
+            }
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 10px rgba(79, 172, 254, 0);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(79, 172, 254, 0);
+            }
         }
 
         .error {
@@ -200,6 +219,10 @@
 
         <div class="content">
             <div class="location-card">
+                <div style="background: #fff3cd; color: #856404; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+                    <strong>📱 Para móviles:</strong> Esta página necesita ser servida desde HTTPS para que funcionen los permisos de ubicación. 
+                    <br><small>Puedes subirla a GitHub Pages, Netlify o usar un servidor HTTPS local.</small>
+                </div>
                 <div style="text-align: center; margin-bottom: 20px;">
                     <button class="btn" onclick="getLocation()">
                         📍 Obtener Mi Ubicación
@@ -247,7 +270,21 @@
                     </div>
                 </div>
 
-                <div id="map" style="display: none; margin-top: 20px;"></div>
+                <div style="margin-top: 20px;">
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: 600; color: #495057; margin-bottom: 10px; display: block;">🎨 Estilo del Mapa:</label>
+                        <select id="mapStyle" onchange="changeMapStyle()" style="padding: 10px; border-radius: 8px; border: 1px solid #ddd; background: white; cursor: pointer; width: 100%; max-width: 300px;">
+                            <option value="openstreetmap">🗺️ OpenStreetMap (Clásico)</option>
+                            <option value="dark">🌙 Modo Oscuro</option>
+                            <option value="satellite">🛰️ Satélite</option>
+                            <option value="terrain">🏔️ Relieve/Terreno</option>
+                            <option value="watercolor">🎨 Acuarela</option>
+                            <option value="toner">⚫ Minimalista B&N</option>
+                            <option value="outdoors">🌲 Outdoor/Senderismo</option>
+                        </select>
+                    </div>
+                    <div id="map" style="display: none;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -258,6 +295,82 @@
         let marker;
         let watchId;
         let isWatching = false;
+        let currentTileLayer;
+
+        // Configuraciones de mapas
+        const mapStyles = {
+            openstreetmap: {
+                url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                attribution: '© OpenStreetMap contributors',
+                name: 'OpenStreetMap'
+            },
+            dark: {
+                url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                attribution: '© OpenStreetMap contributors © CARTO',
+                name: 'Modo Oscuro'
+            },
+            satellite: {
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+                name: 'Satélite'
+            },
+            terrain: {
+                url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}{r}.png',
+                attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> — Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                name: 'Relieve'
+            },
+            watercolor: {
+                url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg',
+                attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> — Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                name: 'Acuarela'
+            },
+            toner: {
+                url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/toner/{z}/{x}/{y}{r}.png',
+                attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> — Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                name: 'Minimalista'
+            },
+            outdoors: {
+                url: 'https://{s}.tile.thunderforest.com/outdoors/{z}/{x}/{y}.png?apikey=6170aad10dfd42a38d4d8c709a536f38',
+                attribution: 'Maps © <a href="http://www.thunderforest.com">Thunderforest</a>, Data © <a href="http://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+                name: 'Outdoor'
+            }
+        };
+
+        function changeMapStyle() {
+            if (!map) return;
+            
+            const selectedStyle = document.getElementById('mapStyle').value;
+            const styleConfig = mapStyles[selectedStyle];
+            
+            // Remover capa anterior
+            if (currentTileLayer) {
+                map.removeLayer(currentTileLayer);
+            }
+            
+            // Añadir nueva capa
+            currentTileLayer = L.tileLayer(styleConfig.url, {
+                attribution: styleConfig.attribution
+            }).addTo(map);
+
+            // Actualizar estilo del marcador según el tema
+            if (marker && selectedStyle === 'dark') {
+                // Marcador personalizado para tema oscuro
+                const darkIcon = L.divIcon({
+                    html: '<div style="background: #ff4757; border: 3px solid #fff; border-radius: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; box-shadow: 0 3px 10px rgba(0,0,0,0.3);"></div>',
+                    iconSize: [20, 20],
+                    className: 'custom-marker'
+                });
+                marker.setIcon(darkIcon);
+            } else if (marker) {
+                // Marcador estándar para otros temas
+                const standardIcon = L.divIcon({
+                    html: '<div style="background: #4facfe; border: 3px solid #fff; border-radius: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; box-shadow: 0 3px 10px rgba(0,0,0,0.3);"></div>',
+                    iconSize: [20, 20],
+                    className: 'custom-marker'
+                });
+                marker.setIcon(standardIcon);
+            }
+        }
 
         function showLoading() {
             document.getElementById('loading').classList.add('show');
@@ -313,48 +426,96 @@
             mapDiv.style.display = 'block';
 
             if (!map) {
-                // Crear mapa
+                // Crear mapa con estilo inicial
                 map = L.map('map').setView([lat, lng], 16);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors'
+                
+                const initialStyle = document.getElementById('mapStyle').value;
+                const styleConfig = mapStyles[initialStyle];
+                
+                currentTileLayer = L.tileLayer(styleConfig.url, {
+                    attribution: styleConfig.attribution
                 }).addTo(map);
 
+                // Crear marcador personalizado
+                const customIcon = L.divIcon({
+                    html: '<div style="background: #4facfe; border: 3px solid #fff; border-radius: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; box-shadow: 0 3px 10px rgba(0,0,0,0.3); animation: pulse 2s infinite;"></div>',
+                    iconSize: [20, 20],
+                    className: 'custom-marker'
+                });
+
                 // Añadir marcador
-                marker = L.marker([lat, lng])
+                marker = L.marker([lat, lng], { icon: customIcon })
                     .addTo(map)
                     .bindPopup(`
-                        <b>Tu ubicación actual</b><br>
-                        Lat: ${lat.toFixed(6)}<br>
-                        Lng: ${lng.toFixed(6)}<br>
-                        Precisión: ±${accuracy}m
+                        <div style="font-family: 'Segoe UI', sans-serif; text-align: center;">
+                            <b style="color: #4facfe;">📍 Tu ubicación actual</b><br>
+                            <small style="color: #666;">
+                                Lat: ${lat.toFixed(6)}<br>
+                                Lng: ${lng.toFixed(6)}<br>
+                                Precisión: ±${accuracy}m
+                            </small>
+                        </div>
                     `)
                     .openPopup();
 
-                // Añadir círculo de precisión
-                L.circle([lat, lng], {
+                // Añadir círculo de precisión con animación
+                const circle = L.circle([lat, lng], {
                     color: '#4facfe',
                     fillColor: '#4facfe',
                     fillOpacity: 0.1,
-                    radius: accuracy
+                    radius: accuracy,
+                    weight: 2,
+                    opacity: 0.8
                 }).addTo(map);
+
+                // Animación del círculo
+                let opacity = 0.8;
+                let direction = -1;
+                setInterval(() => {
+                    opacity += direction * 0.02;
+                    if (opacity <= 0.3 || opacity >= 0.8) direction *= -1;
+                    circle.setStyle({ opacity: opacity });
+                }, 50);
+
             } else {
                 // Actualizar mapa existente
                 map.setView([lat, lng], 16);
                 marker.setLatLng([lat, lng]);
                 marker.setPopupContent(`
-                    <b>Tu ubicación actual</b><br>
-                    Lat: ${lat.toFixed(6)}<br>
-                    Lng: ${lng.toFixed(6)}<br>
-                    Precisión: ±${accuracy}m
+                    <div style="font-family: 'Segoe UI', sans-serif; text-align: center;">
+                        <b style="color: #4facfe;">📍 Tu ubicación actual</b><br>
+                        <small style="color: #666;">
+                            Lat: ${lat.toFixed(6)}<br>
+                            Lng: ${lng.toFixed(6)}<br>
+                            Precisión: ±${accuracy}m
+                        </small>
+                    </div>
                 `);
                 marker.openPopup();
             }
         }
 
         function getLocation() {
+            // Verificar si estamos en HTTPS
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                showError('⚠️ IMPORTANTE: La geolocalización requiere HTTPS. Esta página debe servirse desde una URL https:// para funcionar en móviles.');
+                return;
+            }
+
             if (!navigator.geolocation) {
                 showError('La geolocalización no está soportada en este navegador.');
                 return;
+            }
+
+            // Verificar permisos explícitamente
+            if (navigator.permissions) {
+                navigator.permissions.query({name: 'geolocation'}).then(function(result) {
+                    console.log('Estado del permiso:', result.state);
+                    if (result.state === 'denied') {
+                        showError('Los permisos de ubicación están bloqueados. Ve a configuración del navegador y permite la ubicación para este sitio.');
+                        return;
+                    }
+                });
             }
 
             showLoading();
@@ -385,6 +546,12 @@
         }
 
         function watchLocation() {
+            // Verificar HTTPS primero
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                showError('⚠️ IMPORTANTE: La geolocalización requiere HTTPS. Esta página debe servirse desde una URL https:// para funcionar en móviles.');
+                return;
+            }
+
             const watchBtn = document.getElementById('watchBtn');
             
             if (!isWatching) {
